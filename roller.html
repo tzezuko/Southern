@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Firelizard Clutch Roller</title>
+<style>
+  :root{
+    --g1:#FFD780; --g2:#FFB347; --g3:#C9AEEA; --g4:#A9C2F5; --g5:#A0F0C4;
+    --bg:#121212; --panel:#1e1e1e; --line:#333; --text:#eaeaea; --accent:#4A8FD1;
+  }
+  html,body{height:100%}
+  body{
+    margin:0; padding:20px; background:var(--bg); color:var(--text);
+    font:14px/1.5 system-ui, Segoe UI, Verdana, sans-serif;
+  }
+  .wrap{max-width:820px; margin:0 auto}
+  .header{
+    background-image:linear-gradient(127deg,var(--g1),var(--g2),var(--g3),var(--g4),var(--g5));
+    color:#000; border:1px solid #A8ACB6; outline:3px solid #A8ACB6;
+    border-radius:14px; padding:14px; font-weight:800; text-align:center; margin-bottom:16px;
+  }
+  .card{background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:12px; margin:10px 0}
+  .bar{display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin:8px 0 12px}
+  .radio,.checkbox{display:flex; align-items:center; gap:6px}
+  .btn{
+    background:var(--accent); color:#fff; border:none; border-radius:8px; padding:8px 12px; font-weight:700; cursor:pointer;
+    box-shadow:0 0 0 1px #2c5278 inset; transition:background .2s ease, transform .05s ease;
+  }
+  .btn:hover{ background:#356aa0 }
+  .btn:active{ transform:translateY(1px) scale(.99) }
+  .btn-ghost{ background:transparent; color:#c3a3e0; border:1px dashed #6b5a7a }
+  .btn-ghost:hover{ background:rgba(195,163,224,.1) }
+  .chips{display:flex; flex-wrap:wrap; gap:6px; margin:6px 0}
+  .chip{
+    display:inline-block; padding:2px 8px; border-radius:999px; background:#2b2b2b; border:1px solid #555; font-weight:600
+  }
+  table{width:100%; border-collapse:collapse; margin-top:8px}
+  th,td{border:1px solid #333; padding:6px; text-align:center}
+  th{background:#222; color:#c3a3e0}
+  textarea{width:100%; min-height:120px; background:#0e0e0e; color:#d6f5ef; border:1px solid #333; border-radius:8px; padding:8px}
+  .mut-note{color:#A0F0C4; font-weight:600; margin-top:6px}
+  .footer{opacity:.8; font-size:12px; text-align:center; margin-top:10px}
+  .hint{opacity:.8}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="header">FIRELIZARD CLUTCH ROLLER</div>
+
+  <div class="card">
+    <div class="bar">
+      <strong>Clutch Type:</strong>
+      <label class="radio"><input type="radio" name="clutchType" value="large" checked> Large</label>
+      <label class="radio"><input type="radio" name="clutchType" value="medium"> Medium</label>
+      <label class="radio"><input type="radio" name="clutchType" value="small"> Small</label>
+
+      <label class="checkbox" title="Large only: guarantee exactly 1 Queen. Extra queens turn to Bronze.">
+        <input type="checkbox" id="gq" checked> Large: Guarantee 1 Queen
+      </label>
+
+      <button class="btn" id="rollSize">🎲 Roll Size</button>
+      <button class="btn" id="rollColors">🎯 Roll Colors</button>
+      <button class="btn btn-ghost" id="reset">↺ Reset</button>
+    </div>
+
+    <div id="sizeOut" class="card"></div>
+    <div id="colorsOut" class="card"></div>
+    <div id="mutOut" class="mut-note"></div>
+  </div>
+
+  <div class="card">
+    <strong>Copy back to forum (BBCode):</strong>
+    <div class="hint">After rolling, click “Copy BBCode” and paste into your Jcink post.</div>
+    <textarea id="bb"></textarea>
+    <div class="bar">
+      <button class="btn" id="copy">Copy BBCode</button>
+    </div>
+  </div>
+
+  <div class="footer">Rules enforced: 1 mutation max per clutch · Small = no Queens · Large “Guarantee” keeps 1 Queen; extras → Bronze.</div>
+</div>
+
+<script>
+(()=> {
+  // ---------- helpers ----------
+  const $=s=>document.querySelector(s), $$=s=>Array.from(document.querySelectorAll(s));
+  const rand=(a,b)=>Math.floor(Math.random()*(b-a+1))+a;
+  const d6=()=>rand(1,6), d3=()=>rand(1,3);
+  const map6=n=>[10,11,12,13,14,15][n-1], map3=n=>[5,6,7][n-1];
+  const icon=c=>({Queen:'👑',Bronze:'🟠',Brown:'🟤',Blue:'🔵',Green:'🟢',Mutation:'⚪'})[c]||'•';
+
+  function rollColor(){ const r=rand(1,100);
+    if(r<=3) return 'Queen';
+    if(r<=12) return 'Bronze';
+    if(r<=25) return 'Brown';
+    if(r<=50) return 'Blue';
+    if(r<=98) return 'Green';
+    return 'Mutation';
+  }
+
+  const QueenMut = {
+    Common:['Genderswap','Gigantism','Dwarfism','Marfanism','Polydactyl','Vitiligo','Erythrism','Melanistic','Leucism'],
+    Rare:['Piebald (≤25% white)','Albinism','Bi-color'],
+    'Very Rare':['Wingless','White']
+  };
+  const NonQueenMut = {
+    Common:['Genderswap','Gigantism','Dwarfism','Marfanism','Polydactyl','Vitiligo','Erythrism','Melanistic','Leucism'],
+    Rare:['Piebald'],
+    'Very Rare':['Albinism','Bi-color'],
+    'Extremely Rare':['Wingless','White']
+  };
+  const pickWeighted = (arr)=>{ const tot=arr.reduce((s,i)=>s+i.w,0); let r=Math.random()*tot; for(const i of arr){ r-=i.w; if(r<=0) return i.v; } return arr.at(-1).v; };
+  const WQ=[{v:'Common',w:70},{v:'Rare',w:22},{v:'Very Rare',w:8}];
+  const WN=[{v:'Common',w:70},{v:'Rare',w:18},{v:'Very Rare',w:10},{v:'Extremely Rare',w:2}];
+
+  function rollMutation(hasQueen){
+    const rarity = pickWeighted(hasQueen?WQ:WN);
+    const pool = (hasQueen?QueenMut:NonQueenMut)[rarity];
+    return {rarity, trait: pool[rand(0,pool.length-1)]};
+  }
+
+  const tally = arr => arr.reduce((m,v)=> (m[v]=(m[v]||0)+1, m), {});
+  const S = { type:'large', eggs:0, gq:true };
+
+  // ---------- UI wiring ----------
+  $$("input[name=clutchType]").forEach(r=>r.addEventListener('change',()=>{
+    S.type=r.value;
+    $('#gq').disabled = S.type!=='large';
+    if(S.type!=='large'){ $('#gq').checked=false; S.gq=false; }
+  }));
+  $('#gq').addEventListener('change',e=> S.gq = e.target.checked);
+
+  $('#rollSize').addEventListener('click', ()=>{
+    const die = S.type==='small' ? d3() : d6();
+    S.eggs = S.type==='small' ? map3(die) : map6(die);
+    $('#sizeOut').innerHTML =
+      `Type: <b>${S.type}</b> · Die: <b>${S.type==='small'?'1d3':'1d6'}</b> → Rolled <b>${die}</b> · Eggs: <b>${S.eggs}</b><br>`+
+      `Guarantee Queen: <b>${S.type==='large'&&S.gq?'Yes':'No'}</b>`;
+  });
+
+  $('#rollColors').addEventListener('click', ()=>{
+    if(!S.eggs){ $('#colorsOut').textContent='Roll size first.'; return; }
+
+    let hasQ=false, mutUsed=false, res=[];
+    if(S.type==='large' && S.gq){
+      hasQ = true;
+      res.push({egg:1,color:'Queen'});
+      for(let i=2;i<=S.eggs;i++){
+        let c = rollColor();
+        if(c==='Mutation' && mutUsed){ do{ c=rollColor(); }while(c==='Mutation'); }
+        if(c==='Mutation') mutUsed=true;
+        if(c==='Queen' && hasQ) c='Bronze';
+        res.push({egg:i,color:c});
+      }
+    } else {
+      for(let i=1;i<=S.eggs;i++){
+        let c = rollColor();
+        if(S.type==='small' && c==='Queen') c='Bronze'; // small: no queens
+        if(c==='Mutation' && mutUsed){ do{ c=rollColor(); }while(c==='Mutation'); }
+        if(c==='Mutation') mutUsed=true;
+        res.push({egg:i,color:c});
+        if(c==='Queen') hasQ=true;
+      }
+      // multiple queens → convert extras to bronze
+      const qIdx = res.map((r,i)=>r.color==='Queen'?i:-1).filter(i=>i>=0);
+      if(qIdx.length>1) qIdx.slice(1).forEach(i=> res[i].color='Bronze');
+      hasQ = qIdx.length>0;
+    }
+    if(S.type==='small'){ res.forEach(r=>{ if(r.color==='Queen') r.color='Bronze'; }); hasQ=false; }
+
+    const mutInfo = res.some(r=>r.color==='Mutation') ? rollMutation(hasQ) : null;
+    const ct = tally(res.map(r=>r.color));
+
+    // Render
+    const rows = res.map(r =>
+      `<tr><td>${r.egg}</td><td>${icon(r.color)} ${r.color}</td><td>${r.color==='Mutation'&&mutInfo?`${mutInfo.trait} · ${mutInfo.rarity}`:''}</td></tr>`
+    ).join('');
+    $('#colorsOut').innerHTML = `
+      <div class="chips">
+        <span class="chip">👑 Queen: <b>${ct.Queen||0}</b></span>
+        <span class="chip">🟠 Bronze: <b>${ct.Bronze||0}</b></span>
+        <span class="chip">🟤 Brown: <b>${ct.Brown||0}</b></span>
+        <span class="chip">🔵 Blue: <b>${ct.Blue||0}</b></span>
+        <span class="chip">🟢 Green: <b>${ct.Green||0}</b></span>
+        <span class="chip">⚪ Mutation: <b>${ct.Mutation||0}</b></span>
+      </div>
+      <table>
+        <thead><tr><th>#</th><th>Result</th><th>Details</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    `;
+    $('#mutOut').textContent = (ct.Mutation||0) ? `Mutation: ${mutInfo.trait} (${mutInfo.rarity})` : '';
+
+    // BBCode export
+    const bbRows = res.map(r=>`[tr][td]${r.egg}[/td][td]${r.color}[/td][td]${(r.color==='Mutation'&&mutInfo)?`${mutInfo.trait} (${mutInfo.rarity})`:''}[/td][/tr]`).join('\n');
+    $('#bb').value =
+`[b]Clutch Size:[/b] ${S.eggs} (${S.type}${S.type==='large'&&S.gq?'; guarantee 1 queen':''})
+[b]Spread Counts:[/b] Q:${ct.Queen||0} Br:${ct.Bronze||0} Brn:${ct.Brown||0} Bl:${ct.Blue||0} Gr:${ct.Green||0} Mut:${ct.Mutation||0}
+[table]
+[tr][th]#[/th][th]Result[/th][th]Details[/th][/tr]
+${bbRows}
+[/table]${(ct.Mutation||0)?`\n[i]Mutation:[/i] ${mutInfo.trait} (${mutInfo.rarity})`:''}`;
+  });
+
+  $('#reset').addEventListener('click', ()=>{
+    S.eggs=0; $('#sizeOut').textContent=''; $('#colorsOut').textContent=''; $('#mutOut').textContent=''; $('#bb').value='';
+  });
+
+  $('#copy').addEventListener('click', ()=>{
+    const ta = $('#bb'); ta.focus(); ta.select();
+    document.execCommand('copy');
+  });
+
+  // Optional: URL params to preselect type & guarantee (e.g. ?type=small or ?type=large&gq=0)
+  const qs = new URLSearchParams(location.search);
+  const t = qs.get('type');
+  if (t && ['large','medium','small'].includes(t)){
+    document.querySelector(`input[name="clutchType"][value="${t}"]`).checked = true;
+    S.type = t;
+    $('#gq').disabled = t!=='large';
+  }
+  const gq = qs.get('gq');
+  if (gq!==null){ const v = gq==='1' || gq==='true'; $('#gq').checked=v; $('#gq').disabled = S.type!=='large'; S.gq=v && S.type==='large'; }
+})();
+</script>
+</body>
+</html>
